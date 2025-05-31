@@ -1,6 +1,7 @@
 #include <chrono>
 #include <llama.h>
 #include "threadPool.cpp"
+#include "llama_schedular.cpp"
 #include <pthread.h>
 #include <atomic>
 #include <vector>
@@ -22,6 +23,8 @@ typedef struct {
     uint32_t index;
     char response_buffer[MAX_RESPONSE_LENGTH];
 } llama_context_t;
+
+std::vector<struct llama_context*> contexts;
 
 static llama_context_t llama_pool[LLAMA_POOL_SIZE];
 static pthread_mutex_t llama_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -78,7 +81,7 @@ static const llama_vocab* get_vocab_safe() {
 
 
 
-char * ai_run_inference(const char* prompt) {
+char * ai_run_inference(struct llama_context* ctx, const char* prompt) {
     int n_predict = 20;
     
     const llama_vocab* vocab = get_vocab_safe();
@@ -98,37 +101,16 @@ char * ai_run_inference(const char* prompt) {
     llama_batch batch = llama_batch_get_one(prompt_tokens.data(), prompt_tokens.size());
     llama_token new_token_id;
     
-    llama_ctx_handle_t handle = {NULL, -1};
-    
-    // Timeout mechanism for acquiring context
-    int attempts = 0;
-    const int max_attempts = 1000; // 100ms total timeout
-    
-    while (handle.ctx == NULL && attempts < max_attempts) {
-        handle = acquire_llama_ctx();
-        if (handle.ctx) break;
-        usleep(100); // 0.1ms
-        attempts++;
-    }
-    
-    if (!handle.ctx) {
-        fprintf(stderr, "Failed to acquire LLaMA context after timeout\n");
-        llama_sampler_free(smpl);
-        return NULL;
-    }
-
     // Clear KV cache to ensure clean state
     // llama_kv_cache_clear(handle.ctx);
-    
     // Use the per-context buffer instead of malloc
-    char* response = llama_pool[handle.pool_index].response_buffer;
+    char response[MAX_RESPONSE_LENGTH];
     memset(response, 0, MAX_RESPONSE_LENGTH);
     size_t response_len = 0;
 
     for (int n_pos = batch.n_tokens; n_pos + batch.n_tokens < n_prompt + n_predict; ) {
-        if (llama_decode(handle.ctx, batch)) {
+        if (llama_decode(ctx, batch)) {
             fprintf(stderr, "%s : failed to eval, return code %d\n", __func__, 1);
-            release_llama_ctx(handle);
             llama_sampler_free(smpl);
             return NULL;
         }
@@ -136,7 +118,7 @@ char * ai_run_inference(const char* prompt) {
         n_pos += batch.n_tokens;
 
         {
-            new_token_id = llama_sampler_sample(smpl, handle.ctx, -1);
+            new_token_id = llama_sampler_sample(smpl, ctx, -1);
 
             if (llama_vocab_is_eog(vocab, new_token_id)) {
                 break;
@@ -146,7 +128,6 @@ char * ai_run_inference(const char* prompt) {
             int n = llama_token_to_piece(vocab, new_token_id, buf, sizeof(buf), 0, true);
             if (n < 0) {
                 fprintf(stderr, "%s: error: failed to convert token to piece\n", __func__);
-                release_llama_ctx(handle);
                 llama_sampler_free(smpl);
                 return NULL;
             }
@@ -163,13 +144,12 @@ char * ai_run_inference(const char* prompt) {
     }
     
     llama_sampler_free(smpl);
-    // printf("Response: %s\n", response);
+    printf("Response: %s\n", response);
     
     // Allocate new memory for return value
     char* result = (char*)malloc(strlen(response) + 1);
     strcpy(result, response);
     
-    release_llama_ctx(handle);
     return result;
 }
 
@@ -188,40 +168,36 @@ int main() {
     // pthread_mutex_init(&llama_pool_mutex, NULL);
     llama_context_params lcparams = llama_context_default_params();
     lcparams.n_ctx      = 4096;
-    lcparams.n_threads  = 4;  // Reduced from 8 for better concurrency
+    lcparams.n_threads  = 1;  // Reduced from 8 for better concurrency
     lcparams.flash_attn = false;
     lcparams.no_perf = false;
 
-    pthread_mutex_lock(&llama_pool_mutex);
+    // pthread_mutex_lock(&llama_pool_mutex);
+    // for(int i = 0; i < LLAMA_POOL_SIZE; i++) {
+        // llama_pool[i].ctx = llama_init_from_model(model, lcparams);
+        // llama_pool[i].in_use = false;
+        // llama_pool[i].index = i;
+    // }
+    // pthread_mutex_unlock(&llama_pool_mutex);
     for(int i = 0; i < LLAMA_POOL_SIZE; i++) {
-        llama_pool[i].ctx = llama_init_from_model(model, lcparams);
-        llama_pool[i].in_use = false;
-        llama_pool[i].index = i;
+        struct llama_context *ctx = llama_init_from_model(model, lcparams);
+        contexts.push_back(ctx);
     }
-    pthread_mutex_unlock(&llama_pool_mutex);
 
     printf("LLaMa Model initialized checking threadpool now\n");
-    std::vector<std::string> messages = {"Hello", "How are you?", "what is india?", "how is Lous country?"};
-    ThreadPool pool(4); // Create pool with 4 threads
-    std::vector<std::future<char *>> results;
+    std::vector<std::string> messages = {"Hello", "How are you?", "what is india?", "how is Laos country?"};
+    LlamaSchedular scheduler(contexts);
 
-// Your existing code with timing added
-auto start_time = std::chrono::high_resolution_clock::now();
-
-for(int i = 0; i < LLAMA_POOL_SIZE; i++) {
-    std::string message = messages[i];
-    printf("on Index: %d Using message: %s\n", i, message.c_str());
-    
-    results.emplace_back(
-        pool.enqueue([i, message, start_time] {
+    auto start_time = std::chrono::high_resolution_clock::now();
+    for(int i = 0; i < LLAMA_POOL_SIZE; i++) {
+        std::string message = messages[i%4];
+        printf("on Index: %d Using message: %s\n", i, message.c_str());
+        scheduler.schedule([message, start_time, i] (struct llama_context *ctx) {
             auto task_start = std::chrono::high_resolution_clock::now();
             auto task_start_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 task_start - start_time).count();
-            
-            printf("Task %d started at: %ld ms\n", i, task_start_ms);
-            
-            auto result = ai_run_inference(message.c_str());
-            
+            auto result = ai_run_inference(ctx, message.c_str());
+            printf("Result for inference: %s\n", result);
             auto task_end = std::chrono::high_resolution_clock::now();
             auto task_end_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 task_end - start_time).count();
@@ -230,31 +206,8 @@ for(int i = 0; i < LLAMA_POOL_SIZE; i++) {
             
             printf("Task %d completed at: %ld ms (took %ld ms)\n", 
                    i, task_end_ms, duration_ms);
-            
-            return result;
-        })
-    );
-}
-
-// Get results with timing
-for(int i = 0; i < results.size(); i++) {
-    auto result_start = std::chrono::high_resolution_clock::now();
-    auto result = results[i].get();
-    auto result_end = std::chrono::high_resolution_clock::now();
-    
-    auto result_available_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        result_end - start_time).count();
-    
-    std::cout << "Result " << i << " available at: " << result_available_ms 
-              << " ms - " << result << std::endl;
-}
-
-    pthread_mutex_lock(&llama_pool_mutex);
-    for(int i = 0; i < LLAMA_POOL_SIZE; i++) {
-        llama_free(llama_pool[i].ctx);
-        llama_pool[i].ctx = NULL;
+        });
     }
-    pthread_mutex_unlock(&llama_pool_mutex);
-    llama_model_free(model);
+    
     
 }

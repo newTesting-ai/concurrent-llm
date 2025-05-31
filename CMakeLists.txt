@@ -20,6 +20,8 @@ set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_executable(threadpool 
                 main.cpp
                 threadPool.cpp
+                context_worker.cpp
+                llama_schedular.cpp
 )
 
 # Link libraries
