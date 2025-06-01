@@ -22,6 +22,7 @@ add_executable(threadpool
                 threadPool.cpp
                 context_worker.cpp
                 llama_schedular.cpp
+                xxhash.c
 )
 
 # Link libraries

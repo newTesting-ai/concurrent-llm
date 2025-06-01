@@ -12,7 +12,8 @@
 #include <unistd.h>
 #include <future>
 
-#define LLAMA_POOL_SIZE 4
+#define LLAMA_POOL_SIZE 1
+#define MAX_RUN 1
 #define MAX_RESPONSE_LENGTH 4096
 typedef int32_t llama_tokens;
 
@@ -24,7 +25,7 @@ typedef struct {
     char response_buffer[MAX_RESPONSE_LENGTH];
 } llama_context_t;
 
-std::vector<struct llama_context*> contexts;
+std::vector<std::unique_ptr<llama_model_ctx_t>> contexts;
 
 static llama_context_t llama_pool[LLAMA_POOL_SIZE];
 static pthread_mutex_t llama_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -179,9 +180,12 @@ int main() {
         // llama_pool[i].index = i;
     // }
     // pthread_mutex_unlock(&llama_pool_mutex);
+    contexts.reserve(LLAMA_POOL_SIZE);
     for(int i = 0; i < LLAMA_POOL_SIZE; i++) {
-        struct llama_context *ctx = llama_init_from_model(model, lcparams);
-        contexts.push_back(ctx);
+    auto context = std::make_unique<llama_model_ctx_t>();
+        context->ctx = llama_init_from_model(model, lcparams);
+        context->model = model;
+        contexts.emplace_back(std::move(context));
     }
 
     printf("LLaMa Model initialized checking threadpool now\n");
@@ -189,25 +193,15 @@ int main() {
     LlamaSchedular scheduler(contexts);
 
     auto start_time = std::chrono::high_resolution_clock::now();
-    for(int i = 0; i < LLAMA_POOL_SIZE; i++) {
+    for(int i = 0; i < MAX_RUN; i++) {
         std::string message = messages[i%4];
         printf("on Index: %d Using message: %s\n", i, message.c_str());
-        scheduler.schedule([message, start_time, i] (struct llama_context *ctx) {
-            auto task_start = std::chrono::high_resolution_clock::now();
-            auto task_start_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                task_start - start_time).count();
-            auto result = ai_run_inference(ctx, message.c_str());
-            printf("Result for inference: %s\n", result);
-            auto task_end = std::chrono::high_resolution_clock::now();
-            auto task_end_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                task_end - start_time).count();
-            auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                task_end - task_start).count();
-            
-            printf("Task %d completed at: %ld ms (took %ld ms)\n", 
-                   i, task_end_ms, duration_ms);
-        });
-    }
-    
-    
+        scheduler.schedule(message);
+    }   
+    printf("Re Running the prompt to cehck cache resume\n");
+    for(int i = 0; i < MAX_RUN; i++) {
+        std::string message = messages[i%4];
+        printf("on Index: %d Using message: %s\n", i, message.c_str());
+        scheduler.schedule(message);
+    }   
 }

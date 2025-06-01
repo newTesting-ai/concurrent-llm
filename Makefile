@@ -252,6 +252,54 @@ llama/fast:
 	$(MAKE) $(MAKESILENT) -f llama.cpp/src/CMakeFiles/llama.dir/build.make llama.cpp/src/CMakeFiles/llama.dir/build
 .PHONY : llama/fast
 
+context_worker.o: context_worker.cpp.o
+.PHONY : context_worker.o
+
+# target to build an object file
+context_worker.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/threadpool.dir/build.make CMakeFiles/threadpool.dir/context_worker.cpp.o
+.PHONY : context_worker.cpp.o
+
+context_worker.i: context_worker.cpp.i
+.PHONY : context_worker.i
+
+# target to preprocess a source file
+context_worker.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/threadpool.dir/build.make CMakeFiles/threadpool.dir/context_worker.cpp.i
+.PHONY : context_worker.cpp.i
+
+context_worker.s: context_worker.cpp.s
+.PHONY : context_worker.s
+
+# target to generate assembly for a file
+context_worker.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/threadpool.dir/build.make CMakeFiles/threadpool.dir/context_worker.cpp.s
+.PHONY : context_worker.cpp.s
+
+llama_schedular.o: llama_schedular.cpp.o
+.PHONY : llama_schedular.o
+
+# target to build an object file
+llama_schedular.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/threadpool.dir/build.make CMakeFiles/threadpool.dir/llama_schedular.cpp.o
+.PHONY : llama_schedular.cpp.o
+
+llama_schedular.i: llama_schedular.cpp.i
+.PHONY : llama_schedular.i
+
+# target to preprocess a source file
+llama_schedular.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/threadpool.dir/build.make CMakeFiles/threadpool.dir/llama_schedular.cpp.i
+.PHONY : llama_schedular.cpp.i
+
+llama_schedular.s: llama_schedular.cpp.s
+.PHONY : llama_schedular.s
+
+# target to generate assembly for a file
+llama_schedular.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/threadpool.dir/build.make CMakeFiles/threadpool.dir/llama_schedular.cpp.s
+.PHONY : llama_schedular.cpp.s
+
 main.o: main.cpp.o
 .PHONY : main.o
 
@@ -300,6 +348,30 @@ threadPool.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/threadpool.dir/build.make CMakeFiles/threadpool.dir/threadPool.cpp.s
 .PHONY : threadPool.cpp.s
 
+xxhash.o: xxhash.c.o
+.PHONY : xxhash.o
+
+# target to build an object file
+xxhash.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/threadpool.dir/build.make CMakeFiles/threadpool.dir/xxhash.c.o
+.PHONY : xxhash.c.o
+
+xxhash.i: xxhash.c.i
+.PHONY : xxhash.i
+
+# target to preprocess a source file
+xxhash.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/threadpool.dir/build.make CMakeFiles/threadpool.dir/xxhash.c.i
+.PHONY : xxhash.c.i
+
+xxhash.s: xxhash.c.s
+.PHONY : xxhash.s
+
+# target to generate assembly for a file
+xxhash.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/threadpool.dir/build.make CMakeFiles/threadpool.dir/xxhash.c.s
+.PHONY : xxhash.c.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -319,12 +391,21 @@ help:
 	@echo "... ggml-metal"
 	@echo "... llama"
 	@echo "... threadpool"
+	@echo "... context_worker.o"
+	@echo "... context_worker.i"
+	@echo "... context_worker.s"
+	@echo "... llama_schedular.o"
+	@echo "... llama_schedular.i"
+	@echo "... llama_schedular.s"
 	@echo "... main.o"
 	@echo "... main.i"
 	@echo "... main.s"
 	@echo "... threadPool.o"
 	@echo "... threadPool.i"
 	@echo "... threadPool.s"
+	@echo "... xxhash.o"
+	@echo "... xxhash.i"
+	@echo "... xxhash.s"
 .PHONY : help
 
 
